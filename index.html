@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#020202">
+<link rel="manifest" href="manifest.json">
+<title>WUBSTATION 9000 v6</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="machine">
+<div class="hdr">
+  <div>
+    <div class="logo">WUBSTATION 9000 <span class="ver">v6</span></div>
+    <div class="sub">SUB·SEQ·ADSR·FM·NOISE·UNISON·FENV·CRUSH·PHASER·CHORUS·DELAY·REVERB·VOWEL·RING·COMB·STUTTER·GLIDE · &copy; BILL BARTH · AUTHORIZED USE ONLY</div>
+  </div>
+  <div class="leds">
+    <div class="lr"><div class="led" id="l-tx"></div><span class="ll">ON</span></div>
+    <div class="lr"><div class="led" id="l-seq"></div><span class="ll">SEQ</span></div>
+    <div class="lr"><div class="led" id="l-sub"></div><span class="ll">SUB</span></div>
+    <div class="lr"><div class="led" id="l-fm"></div><span class="ll">FM</span></div>
+    <div class="lr"><div class="led" id="l-bc"></div><span class="ll">CRUSH</span></div>
+    <div class="lr"><div class="led" id="l-ph"></div><span class="ll">PH</span></div>
+    <div class="lr"><div class="led" id="l-vow"></div><span class="ll">VOW</span></div>
+    <div class="lr"><div class="led" id="l-rm"></div><span class="ll">RING</span></div>
+    <div class="lr"><div class="led" id="l-comb"></div><span class="ll">COMB</span></div>
+    <div class="lr"><div class="led" id="l-stut"></div><span class="ll">STUT</span></div>
+    <div class="lr"><div class="led" id="l-noise"></div><span class="ll">NSE</span></div>
+    <div class="lr"><div class="led" id="l-fenv"></div><span class="ll">FENV</span></div>
+    <div class="lr"><div class="led" id="l-chorus"></div><span class="ll">CHR</span></div>
+    <div class="lr"><div class="led" id="l-delay"></div><span class="ll">DLY</span></div>
+    <div class="lr"><div class="led" id="l-reverb"></div><span class="ll">RVB</span></div>
+    <div class="lr"><div class="led" id="l-midi"></div><span class="ll">MIDI</span></div>
+  </div>
+</div>
+<div class="body">
+
+<div class="panel"><div class="pt" style="color:#00ff88">OSCILLOSCOPE</div><canvas id="scope"></canvas></div>
+
+<!-- SEQUENCER -->
+<div class="panel">
+  <div class="pt" style="color:#ffcc00">STEP SEQUENCER</div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+    <div style="text-align:center;"><div class="bd" id="bdisp">140</div><span class="bu">BPM</span></div>
+    <div id="k-bpm"></div>
+    <div id="k-swing"></div>
+    <div style="display:flex;flex-direction:column;gap:5px;">
+      <div class="tr">
+        <button class="tb" id="sq-run">&#9654; RUN SEQ</button>
+        <button class="tb" id="sq-clr">CLR</button>
+        <button class="tb" id="sq-fill">FILL</button>
+        <button class="tb" id="sq-alt">ALT</button>
+        <button class="tb" id="sq-wum">WUM WUM</button>
+        <button class="tb" id="sq-lock">LOCK</button>
+      </div>
+      <div class="tr">
+        <span class="sl" style="margin-bottom:0;">STEP:</span>
+        <button class="tb sm" id="ss-1/16" data-ss="1/16">1/16</button>
+        <button class="tb sm" id="ss-1/8" data-ss="1/8">1/8</button>
+        <button class="tb sm" id="ss-1/4" data-ss="1/4">1/4</button>
+        <span class="sl" style="margin-bottom:0;margin-left:8px;">LEN:</span>
+        <button class="tb sm" id="sl-dec">-</button>
+        <span class="sl" style="margin-bottom:0;color:#ffcc00;" id="sl-disp">16</span>
+        <button class="tb sm" id="sl-inc">+</button>
+      </div>
+      <div class="tr">
+        <span class="sl" style="margin-bottom:0;">PATTERN:</span>
+        <button class="tb sm pat-btn" id="pat-0">A</button>
+        <button class="tb sm pat-btn" id="pat-1">B</button>
+        <button class="tb sm pat-btn" id="pat-2">C</button>
+        <button class="tb sm pat-btn" id="pat-3">D</button>
+        <button class="tb sm pat-btn" id="pat-4">E</button>
+        <button class="tb sm pat-btn" id="pat-5">F</button>
+        <button class="tb sm pat-btn" id="pat-6">G</button>
+        <button class="tb sm pat-btn" id="pat-7">H</button>
+      </div>
+    </div>
+  </div>
+  <span class="sl">PATTERN</span>
+  <div class="sg" id="sg"></div>
+  <span class="sl" style="margin-top:7px;">VELOCITY <span style="color:#ffcc00aa;">(DRAG UP/DOWN)</span></span>
+  <div class="sg" id="vg" style="margin-top:0;"></div>
+  <span class="sl" style="margin-top:7px;">PER-STEP NOTE</span>
+  <div class="ns" id="ns"></div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px;margin-bottom:4px;">
+    <button class="tb" id="vow-tog">VOWEL OFF</button>
+    <div class="vbr" id="vbr"></div>
+    <div id="k-vmix"></div>
+  </div>
+  <span class="sl">PER-STEP VOWEL <span style="color:#cc44ff;">(SELECT STEP &rarr; CLICK VOWEL)</span></span>
+  <div class="vs" id="vs"></div>
+</div>
+
+<!-- SUB + ADSR -->
+<div class="g2">
+  <div class="panel">
+    <div class="pt" style="color:#00ccff">SUB BASS · THUMP</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="tr"><button class="tb" id="sub-tog">SUB OFF</button><span style="font-size:10px;color:#666;letter-spacing:1px;">PURE SINE · NO FX</span></div>
+      <div class="kr" style="padding-top:0;"><div id="k-sv"></div><div id="k-so"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ffcc00">ADSR ENVELOPE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="av"><svg viewBox="0 0 220 40" preserveAspectRatio="none"><path id="ap" fill="rgba(255,204,0,.08)" stroke="#ffcc00" stroke-width="1.5" style="filter:drop-shadow(0 0 3px #ffcc00)"/></svg></div>
+      <div class="kr" style="padding-top:0;"><div id="k-A"></div><div id="k-D"></div><div id="k-S"></div><div id="k-R"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- OSC + NOISE + UNISON + FM + FILTER + LFO1 -->
+<div class="g5">
+  <div class="panel">
+    <div class="pt" style="color:#00ff88">OSCILLATORS</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div><span class="sl">OSC 1</span><div class="wr" id="o1w"></div></div>
+      <div><span class="sl">OSC 2</span><div class="wr" id="o2w"></div></div>
+      <div class="kr" style="padding-top:2px;"><div id="k-o1v"></div><div id="k-det"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#00ccff">NOISE · TEXTURE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="noise-tog">NOISE OFF</button>
+      <div class="tr">
+        <button class="tb sm" id="nt-white">WHITE</button>
+        <button class="tb sm" id="nt-pink">PINK</button>
+        <button class="tb sm" id="nt-brown">BROWN</button>
+      </div>
+      <div class="kr" style="padding-top:0;"><div id="k-nvol"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">WHITE=BRIGHT<br>PINK=NATURAL<br>BROWN=RUMBLE</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ff8800">FM SYNTH</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="tr"><button class="tb" id="fm-tog">FM OFF</button></div>
+      <div class="kr" style="padding-top:0;"><div id="k-fmd"></div><div id="k-fmr"></div></div>
+      <div class="kr"><div id="k-pb"></div><div id="k-pd"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ff8800">FILTER</div>
+    <div class="tr" style="margin-bottom:4px;">
+      <button class="tb" id="fenv-tog">FILT ENV OFF</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="tr">
+        <button class="tb sm" id="ft-lpf">LPF</button>
+        <button class="tb sm" id="ft-bpf">BPF</button>
+        <button class="tb sm" id="ft-hpf">HPF</button>
+        <button class="tb sm" id="ft-notch">NOTCH</button>
+      </div>
+      <div class="fviz">
+        <svg viewBox="0 0 250 50" preserveAspectRatio="none">
+          <path id="ff" fill="rgba(255,136,0,.05)"/>
+          <path id="fl" fill="none" stroke="#ff8800" stroke-width="1.5" style="filter:drop-shadow(0 0 3px #ff8800)"/>
+        </svg>
+      </div>
+      <div class="kr" style="padding-top:0;"><div id="k-cut"></div><div id="k-res"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#cc44ff">LFO 1 · WOBBLE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="wr" id="l1w"></div>
+      <div class="kr" style="padding-top:0;"><div id="k-l1r"></div><div id="k-l1d"></div></div>
+      <div class="tr">
+        <button class="tb sm" id="syn1">FREE</button>
+        <button class="tb sm" id="d1-1/4" data-d1="1/4">1/4</button>
+        <button class="tb sm" id="d1-1/8" data-d1="1/8">1/8</button>
+        <button class="tb sm" id="d1-1/16" data-d1="1/16">1/16</button>
+        <button class="tb sm" id="d1-1/32" data-d1="1/32">1/32</button>
+      </div>
+      <div style="font-size:10px;color:#cc44ff99;" id="l1hz"></div>
+    </div>
+  </div>
+</div>
+
+<!-- UNISON + FILTER ENVELOPE -->
+<div class="g2">
+  <div class="panel">
+    <div class="pt" style="color:#00ff88">UNISON · SUPERSAW</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="kr" style="padding-top:0;"><div id="k-univ"></div><div id="k-unis"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">1=MONO · 3=THICK · 7=MASSIVE<br>SPREAD=DETUNE WIDTH IN CENTS</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ffcc00">FILTER ENVELOPE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="kr" style="padding-top:0;">
+        <div id="k-fea"></div><div id="k-fed"></div><div id="k-fes"></div><div id="k-fer"></div><div id="k-feamt"></div>
+      </div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">+AMT=OPEN ON HIT · -AMT=CLOSE ON HIT<br>PLUCKS · ACID SQUELCH · ENVELOPE BASS</div>
+    </div>
+  </div>
+</div>
+
+<!-- FX ROW 1 -->
+<div class="g5">
+  <div class="panel">
+    <div class="pt" style="color:#ff4444">BITCRUSH</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="bc-tog">&#9760; CRUSH OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-bit"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">BITS 7=DOCTOR P<br>BITS 4=NUCLEAR</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ff8800">PHASER</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="ph-tog">&#12316; PH OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-phr"></div><div id="k-phd"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ffcc00">AMP LFO · PUMP</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="al-tog">PUMP OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-alr"></div><div id="k-ald"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#00ccff">LFO 2 · MORPH</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="wr" id="l2w"></div>
+      <div class="kr" style="padding-top:0;"><div id="k-l2r"></div><div id="k-l2d"></div></div>
+      <div class="tr">
+        <button class="tb sm" id="t-pitch" data-tgt="pitch">PITCH</button>
+        <button class="tb sm" id="t-fm" data-tgt="fm">FM</button>
+        <button class="tb sm" id="t-cut2" data-tgt="cutoff2">CUT</button>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ff4444">DIST · MASTER</div>
+    <div class="kr" style="padding-top:4px;"><div id="k-dis"></div><div id="k-vol"></div></div>
+  </div>
+</div>
+
+<!-- FX ROW 2 -->
+<div class="g4">
+  <div class="panel">
+    <div class="pt" style="color:#ff44cc">RING MOD · ALIEN</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="rm-tog">RING OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-rmf"></div><div id="k-rmm"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">50Hz=CLANG<br>400Hz=ROBOT<br>1kHz=ALIEN</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#00ff88">COMB · REESE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="cb-tog">COMB OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-cbf"></div><div id="k-cbg"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">80Hz=REESE BASS<br>FB 0.9=METALLIC</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ff4444">STUTTER · TEAROUT</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="st-tog">STUTTER OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-str"></div><div id="k-std"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;">32Hz=MACHINE GUN<br>10Hz=TREMOLO</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#ffcc00">GLIDE · FLOW</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="kr" style="padding-top:0;"><div id="k-gli"></div></div>
+      <div style="font-size:9px;color:#666;line-height:1.7;margin-top:4px;">0ms=HARD CUTS<br>40ms=RIDDIM FLOW<br>200ms=TROMBONE</div>
+    </div>
+  </div>
+</div>
+
+<!-- FX ROW 3: v6 EFFECTS -->
+<div class="g3">
+  <div class="panel">
+    <div class="pt" style="color:#00ccff">CHORUS · THICK</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="ch-tog">CHORUS OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-chr"></div><div id="k-chd"></div><div id="k-chm"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#00ccff">DELAY · ECHO</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <div class="tr">
+        <button class="tb" id="dl-tog">DELAY OFF</button>
+        <button class="tb sm" id="ds-1/4" data-ds="1/4">1/4</button>
+        <button class="tb sm" id="ds-1/8" data-ds="1/8">1/8</button>
+        <button class="tb sm" id="ds-1/8d" data-ds="1/8d">1/8D</button>
+        <button class="tb sm" id="ds-1/16" data-ds="1/16">1/16</button>
+        <button class="tb sm" id="ds-free" data-ds="free">FREE</button>
+      </div>
+      <div class="kr" style="padding-top:0;"><div id="k-dlfb"></div><div id="k-dlm"></div><div id="k-dlf"></div></div>
+      <div class="kr" style="padding-top:0;"><div id="k-dlft"></div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="pt" style="color:#cc44ff">REVERB · SPACE</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button class="tb" id="rv-tog">REVERB OFF</button>
+      <div class="kr" style="padding-top:0;"><div id="k-rvs"></div><div id="k-rvd"></div><div id="k-rvm"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel"><div class="pt" style="color:#00ccff">ROOT NOTE</div><div class="nr" id="notes"></div></div>
+<div class="panel">
+  <div class="pt" style="color:#ff8800">ARTIST PRESETS</div>
+  <div class="pr" id="presets"></div>
+  <div style="margin-top:8px;">
+    <span class="sl">USER PRESETS <span style="color:#44aaffaa;">(RIGHT-CLICK TO DELETE · DRAG .WUB TO IMPORT)</span></span>
+    <div class="pr" id="user-presets"></div>
+    <div class="tr" style="margin-top:6px;">
+      <button class="tb" id="preset-save">SAVE PRESET</button>
+      <button class="tb" id="preset-export">EXPORT .WUB</button>
+      <button class="tb" id="midi-learn">MIDI LEARN</button>
+      <button class="tb" id="export-wav" style="color:#00ff88;border-color:#00ff8844;">EXPORT WAV</button>
+    </div>
+  </div>
+</div>
+<button id="eng">&#9654;&nbsp; ENGAGE WUB</button>
+<div class="tip">VOWEL SEQ = TALKING BASS · RING MOD = ALIEN · COMB = REESE · STUTTER = TEAROUT · GLIDE = RIDDIM FLOW · CHORUS = THICK · DELAY = DUB · REVERB = SPACE</div>
+<div class="cbar">
+  <div>
+    <div style="font-family:'Orbitron','Impact','Arial Black',sans-serif;font-size:12px;font-weight:700;color:#00ff88;letter-spacing:3px;">WUBSTATION 9000</div>
+    <div style="font-size:10px;color:#777;letter-spacing:2px;margin-top:3px;">DESIGNED &amp; BUILT BY <span style="color:#ff8800;letter-spacing:3px;">BILL BARTH</span></div>
+  </div>
+  <div style="border:1px solid #ff440022;border-radius:4px;padding:7px 12px;background:#ff440008;text-align:right;">
+    <div style="font-size:10px;color:#ff4444;letter-spacing:2px;font-family:'Orbitron','Impact','Arial Black',sans-serif;">&#9888; RESTRICTED USE</div>
+    <div style="font-size:9px;color:#666;letter-spacing:1.5px;margin-top:3px;line-height:1.7;">FOR AUTHORIZED USERS ONLY<br>WITHOUT EXPRESS PERMISSION OF BILL BARTH</div>
+  </div>
+</div>
+
+</div></div>
+
+<!-- Load order matters: state → engine → scope → sequencer → ui → presets -->
+<script src="js/state.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/scope.js"></script>
+<script src="js/sequencer.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/midi.js"></script>
+<script src="js/export.js"></script>
+<script>
+// Wire MIDI learn button
+document.getElementById('midi-learn').addEventListener('click', function() {
+  if (midiLearnTarget) {
+    midiLearnTarget = null;
+    this.textContent = 'MIDI LEARN';
+    st(this, false, '#44aaff');
+  } else {
+    const param = prompt('Enter parameter to learn (e.g. cutoff, vol, lfo1Rate):');
+    if (param && param.trim()) enterMidiLearn(param.trim());
+  }
+});
+
+// Wire WAV export button
+document.getElementById('export-wav').addEventListener('click', () => {
+  const bars = parseInt(prompt('How many bars to export?', '4')) || 4;
+  exportWav(Math.min(32, Math.max(1, bars)));
+});
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+</script>
+
+</body>
+</html>

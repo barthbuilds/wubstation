@@ -1,0 +1,14 @@
+{
+  "name": "WUBSTATION 9000",
+  "short_name": "WUBSTATION",
+  "description": "Browser Bass Synthesizer by Bill Barth",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#020202",
+  "background_color": "#020202",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

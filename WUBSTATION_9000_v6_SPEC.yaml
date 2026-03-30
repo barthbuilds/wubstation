@@ -1,0 +1,434 @@
+# ============================================================================
+# WUBSTATION 9000 v6 — SPECIFICATION
+# ============================================================================
+# Author: Bill Barth
+# Date: 2026-03-21
+# Status: DRAFT — awaiting review
+#
+# Philosophy: Take the v5 engine (which is already solid) and build a real
+# instrument around it. No frameworks, no build tools, no backend.
+# Multi-file for maintainability, but still opens from a folder.
+# Target: Chrome/Edge/Firefox on Windows + Android. iOS dropped.
+# ============================================================================
+
+meta:
+  name: "WUBSTATION 9000"
+  version: "6.0"
+  tagline: "Browser Bass Synthesizer"
+  author: "Bill Barth"
+  license: "Proprietary — authorized use only"
+  target_platforms:
+    - Chrome 90+ (Windows, Android)
+    - Edge 90+ (Windows)
+    - Firefox 100+ (Windows, Android)
+  dropped_platforms:
+    - iOS Safari (AudioWorklet gaps, Web MIDI absent, PWA limits)
+  deployment: "Static files — no server, no CDN, no build step"
+
+# ============================================================================
+# FILE STRUCTURE
+# ============================================================================
+# Still opens from a folder. No bundler. Just files that reference each other.
+# The index.html is the shell — everything else is loaded via <script>/<link>.
+
+file_structure:
+  root: "WubStation/"
+  files:
+    - index.html          # Shell, layout, PWA manifest link
+    - style.css           # All styles (extracted from v5 <style>)
+    - manifest.json       # PWA manifest for installability
+    - sw.js               # Service worker — offline caching
+    - icon-192.png        # PWA icon
+    - icon-512.png        # PWA icon
+    - js/:
+      - engine.js         # Audio graph, envelope, trigger, param routing
+      - sequencer.js      # Step sequencer logic, pattern ops, swing
+      - ui.js             # Knobs, buttons, LEDs, grid, drag, touch
+      - scope.js          # Oscilloscope + spectrum analyzer
+      - midi.js           # Web MIDI input, MIDI learn, CC mapping
+      - presets.js         # Factory presets + user preset save/load
+      - export.js         # WAV bounce via OfflineAudioContext
+      - state.js          # Central state object, undo stack, serialization
+      - worklets/:
+        - bitcrush-processor.js   # AudioWorklet for real bitcrusher
+        - noise-processor.js      # White/pink/brown noise generator
+
+# ============================================================================
+# ARCHITECTURE
+# ============================================================================
+
+architecture:
+  principle: "Static audio graph, gain-bypass for on/off — same as v5"
+
+  state_management:
+    description: "Single S object (like v5) but with serialization + undo"
+    undo:
+      max_depth: 50
+      triggers: "knob release, button click, preset load, note change"
+      keybind: "Ctrl+Z / Ctrl+Shift+Z"
+    serialization:
+      format: JSON
+      used_for:
+        - preset save/load
+        - localStorage persistence
+        - export as .wub file (just JSON with extension)
+
+  audio_graph:
+    description: |
+      Same topology as v5 but with AudioWorklet nodes replacing WaveShaper
+      hacks where applicable. Sub bass still bypasses FX chain.
+
+    chain: |
+      [OSC1] + [OSC2] → [FM routing] → [VCA/envelope]
+        → [DIST worklet] → [BITCRUSH worklet] → [FILTER]
+        → [PHASER 6x allpass] → [CHORUS] → [DELAY]
+        → split:
+            → [DRY] → mixer
+            → [VOWEL 3x BPF] → [VOWEL WET] → mixer
+            → [RING MOD] → mixer
+            → [COMB] → mixer
+        → [STUTTER] → [MASTER GAIN] → [LIMITER] → [ANALYZER] → output
+
+      [SUB OSC] → [SUB GAIN] → [MASTER GAIN]  (clean, no FX)
+      [NOISE] → [NOISE GAIN] → [VCA]  (pre-filter, into main chain)
+
+# ============================================================================
+# NEW FEATURES (v6 additions over v5)
+# ============================================================================
+
+new_features:
+
+  # --- SYNTHESIS ---
+
+  noise_oscillator:
+    description: "White/pink/brown noise via AudioWorklet"
+    controls:
+      - type: "white | pink | brown"
+      - level: { min: 0, max: 1, default: 0 }
+    routing: "Into VCA, same as OSC1/OSC2 — gets filtered, distorted, etc."
+    use_case: "Snare layers, risers, industrial textures"
+
+  unison:
+    description: "Stack multiple detuned copies of OSC1 for supersaw/superwave"
+    controls:
+      - voices: { min: 1, max: 7, default: 1, step: 2 }  # odd only
+      - spread: { min: 0, max: 100, default: 0, unit: "cents" }
+    implementation: "Additional oscillator nodes, panned L/R with detune spread"
+    use_case: "Fat supersaws, wide leads"
+
+  filter_envelope:
+    description: "Dedicated ADSR that modulates filter cutoff"
+    controls:
+      - attack: { min: 0.001, max: 2, default: 0.01 }
+      - decay: { min: 0.01, max: 3, default: 0.3 }
+      - sustain: { min: 0, max: 1, default: 0.2 }
+      - release: { min: 0.01, max: 2, default: 0.2 }
+      - amount: { min: -8000, max: 8000, default: 2000, unit: "Hz" }
+    implementation: "Scheduled param automation on filter.frequency per trigger"
+    use_case: "Plucks, acid squelch, envelope-following bass"
+
+  # --- EFFECTS ---
+
+  chorus:
+    description: "Stereo chorus via modulated delay lines"
+    controls:
+      - rate: { min: 0.1, max: 10, default: 1.5, unit: "Hz" }
+      - depth: { min: 0, max: 20, default: 5, unit: "ms" }
+      - mix: { min: 0, max: 1, default: 0 }
+    implementation: "2x short delay lines with LFO modulation, stereo offset"
+    use_case: "Thickening, detuned movement"
+
+  delay:
+    description: "Tempo-synced stereo ping-pong delay"
+    controls:
+      - time: "1/4 | 1/8 | 1/8d | 1/16 | free"
+      - free_time: { min: 50, max: 1000, default: 250, unit: "ms" }
+      - feedback: { min: 0, max: 0.9, default: 0.3 }
+      - mix: { min: 0, max: 1, default: 0 }
+      - filter: { min: 200, max: 8000, default: 3000, unit: "Hz" }
+    implementation: "Stereo DelayNodes with cross-feedback and LP in feedback path"
+    use_case: "Dub delays, rhythmic echoes"
+
+  reverb:
+    description: "Algorithmic reverb (no IR files — stays self-contained)"
+    controls:
+      - size: { min: 0.1, max: 5, default: 1.5, unit: "s" }
+      - damping: { min: 0, max: 1, default: 0.5 }
+      - mix: { min: 0, max: 1, default: 0 }
+    implementation: "Network of allpass + comb filters (Schroeder/Freeverb topology)"
+    use_case: "Space, atmosphere, ambient bass"
+
+  # --- SEQUENCER ---
+
+  sequencer_upgrades:
+    variable_length:
+      description: "1-64 steps instead of fixed 16"
+      controls:
+        - length: { min: 1, max: 64, default: 16 }
+      ui: "Steps wrap at 16 per row"
+
+    swing:
+      description: "Shift even-numbered steps forward in time"
+      controls:
+        - amount: { min: 0, max: 75, default: 0, unit: "%" }
+      implementation: "Multiply even-step duration by (1 + swing%), odd by (1 - swing%)"
+
+    velocity_per_step:
+      description: "Each step has a velocity (0-127) affecting VCA peak and filter env amount"
+      controls:
+        - per step: { min: 0, max: 127, default: 100 }
+      ui: "Velocity bars below pattern grid, drag to set"
+
+    probability:
+      description: "Per-step probability of triggering"
+      controls:
+        - per step: { min: 0, max: 100, default: 100, unit: "%" }
+      ui: "Hold shift + click step to cycle probability"
+
+    parameter_locks:
+      description: "Per-step override of any knob value (Elektron-style)"
+      workflow: "Select step → hold Lock button → twist knob → value saved for that step"
+      storage: "seqLocks[step] = { cutoff: 400, reso: 20, ... }"
+      implementation: "On trigger, apply locked params, revert on next step"
+
+    pattern_bank:
+      description: "8 patterns, switchable"
+      controls:
+        - pattern: "A through H buttons"
+        - copy/paste between patterns
+      chain:
+        description: "Chain patterns in order for song-mode playback"
+        max_chain: 32
+
+  # --- MIDI ---
+
+  midi:
+    input:
+      description: "Web MIDI API — receive notes and CCs from hardware"
+      note_input: "Plays note directly (bypasses sequencer) or records into sequencer"
+      cc_mapping: "MIDI learn — click knob, move hardware knob, linked"
+      transport: "Start/stop from MIDI clock or transport buttons"
+
+    midi_learn:
+      workflow:
+        1: "Click MIDI LEARN button (enters learn mode)"
+        2: "Click any knob/button on screen"
+        3: "Move hardware controller"
+        4: "Mapping saved to localStorage"
+      ui: "Mapped controls show a small MIDI icon"
+
+  # --- PRESET SYSTEM ---
+
+  presets:
+    factory:
+      description: "Ship with all v5 presets plus new ones using v6 features"
+      locked: true  # user can't overwrite factory presets
+      new_presets:
+        - "SUPERSAW LEAD"    # unison + chorus
+        - "ACID SQUELCH"     # filter envelope + high reso
+        - "INDUSTRIAL"       # noise + bitcrush + ring mod
+        - "DUB BASS"         # delay + reverb + glide
+        - "NEURO"            # FM + comb + parameter locks
+        - "MINIMAL RIDDIM"   # square LFO + comb + glide
+
+    user:
+      save: "Name + save to localStorage"
+      load: "Dropdown or grid of saved presets"
+      export: "Download as .wub (JSON file)"
+      import: "Drag-and-drop .wub file onto app"
+      delete: "Long-press or right-click to delete"
+      max_user_presets: 128
+
+  # --- AUDIO EXPORT ---
+
+  export:
+    wav_bounce:
+      description: "Render N bars of sequencer output to WAV file"
+      controls:
+        - bars: { min: 1, max: 32, default: 4 }
+        - sample_rate: "44100 | 48000"
+        - bit_depth: 16  # via float32 → int16 conversion
+      implementation: |
+        OfflineAudioContext clones the entire audio graph,
+        runs sequencer for requested duration, renders to AudioBuffer,
+        converts to WAV blob, triggers download.
+      filename: "wubstation-{preset}-{bpm}bpm-{bars}bar.wav"
+
+    loop_export:
+      description: "Render exactly 1 pattern cycle, seamless loop"
+      implementation: "Duration = steps * step_duration"
+
+  # --- PWA ---
+
+  pwa:
+    manifest:
+      name: "WUBSTATION 9000"
+      short_name: "WUBSTATION"
+      display: standalone
+      orientation: landscape  # preferred on mobile
+      theme_color: "#020202"
+      background_color: "#020202"
+
+    service_worker:
+      strategy: "Cache-first, update in background"
+      cached: "All files in file_structure"
+
+    install_prompt:
+      description: "Show 'Install App' button in header when installable"
+
+  # --- UI ENHANCEMENTS ---
+
+  ui:
+    spectrum_analyzer:
+      description: "FFT frequency display alongside oscilloscope"
+      toggle: "Click scope to switch between waveform and spectrum"
+      implementation: "analyser.getByteFrequencyData(), draw bars"
+
+    keyboard_shortcuts:
+      space: "Engage/kill"
+      enter: "Start/stop sequencer"
+      ctrl_z: "Undo"
+      ctrl_shift_z: "Redo"
+      "1-8": "Select pattern A-H"
+      escape: "Exit MIDI learn mode"
+      "[ ]": "BPM -1 / +1"
+      "{ }": "BPM -10 / +10"
+
+    knob_improvements:
+      double_click: "Reset to default value"
+      scroll_wheel: "Fine adjustment"
+      shift_drag: "Extra-fine adjustment (1/10 speed)"
+
+    responsive:
+      description: "Panels collapse to accordion on narrow screens"
+      breakpoints:
+        desktop: ">980px — full grid layout (same as v5)"
+        tablet: "680-980px — 2-column grid"
+        phone: "<680px — single column, collapsible panels"
+
+    theme:
+      description: "Keep the dark hardware aesthetic from v5"
+      accent_colors:
+        primary: "#00ff88"    # green — oscillators, engage
+        secondary: "#ff8800"  # orange — filter, FM
+        warning: "#ff4444"    # red — distortion, bitcrush
+        info: "#00ccff"       # cyan — sub, LFO2
+        mod: "#cc44ff"        # purple — LFO1, vowel
+        special: "#ffcc00"    # yellow — sequencer, ADSR
+        midi: "#44aaff"       # blue — MIDI indicators
+
+# ============================================================================
+# WHAT STAYS THE SAME FROM v5
+# ============================================================================
+
+preserved_from_v5:
+  - "Static audio graph — gain-bypass, no connect/disconnect while running"
+  - "All existing oscillator types (saw, square, sine, triangle)"
+  - "FM synthesis with depth/ratio"
+  - "Pitch bend with decay"
+  - "Sub bass (clean, direct to master)"
+  - "ADSR envelope with visualization"
+  - "Filter (LPF/BPF/HPF/Notch) with visualization"
+  - "LFO1 → filter with BPM sync"
+  - "LFO2 → pitch/FM/cutoff"
+  - "Amp LFO pump"
+  - "Phaser (6-stage allpass)"
+  - "Bitcrush (upgraded to AudioWorklet)"
+  - "Vowel formant filter with per-step sequencing"
+  - "Ring modulator"
+  - "Comb filter"
+  - "Stutter"
+  - "Glide/portamento"
+  - "Distortion + master volume"
+  - "Dark hardware UI aesthetic"
+  - "SVG knob controls"
+  - "LED status indicators"
+  - "All 8 factory presets (WUM WUM WUM through RAPTOR HELL)"
+
+# ============================================================================
+# IMPLEMENTATION PHASES
+# ============================================================================
+
+phases:
+
+  phase_1:
+    name: "Extract & Restructure"
+    description: "Split v5 monolith into multi-file without changing behavior"
+    tasks:
+      - "Extract CSS to style.css"
+      - "Extract engine code to js/engine.js"
+      - "Extract sequencer to js/sequencer.js"
+      - "Extract UI code to js/ui.js"
+      - "Extract scope to js/scope.js"
+      - "Extract presets to js/presets.js"
+      - "Create js/state.js with central state + serialization"
+      - "Create index.html shell"
+      - "Verify: app works identically to v5"
+    validation: "Every preset sounds identical, every knob works"
+
+  phase_2:
+    name: "Core Engine Upgrades"
+    description: "New synthesis and effects features"
+    tasks:
+      - "AudioWorklet bitcrusher (replaces WaveShaper hack)"
+      - "AudioWorklet noise generator"
+      - "Unison engine (1-7 voices)"
+      - "Filter envelope (dedicated ADSR → cutoff)"
+      - "Chorus effect"
+      - "Delay effect (tempo-synced)"
+      - "Reverb (algorithmic, no IR files)"
+    validation: "All new effects work, existing presets unaffected"
+
+  phase_3:
+    name: "Sequencer & State"
+    description: "Advanced sequencer features and state management"
+    tasks:
+      - "Variable sequence length (1-64)"
+      - "Swing"
+      - "Velocity per step"
+      - "Probability per step"
+      - "Parameter locks"
+      - "Pattern bank (A-H)"
+      - "Pattern chaining"
+      - "Undo/redo system"
+      - "Keyboard shortcuts"
+    validation: "Sequence a complex pattern with locks, undo it, redo it"
+
+  phase_4:
+    name: "MIDI & Presets"
+    description: "Hardware control and preset persistence"
+    tasks:
+      - "Web MIDI input (notes + CCs)"
+      - "MIDI learn system"
+      - "User preset save/load (localStorage)"
+      - "Preset export/import (.wub files)"
+      - "New factory presets using v6 features"
+    validation: "Connect MIDI controller, map knobs, save preset, reload — all persists"
+
+  phase_5:
+    name: "Export & PWA"
+    description: "Audio export and installability"
+    tasks:
+      - "WAV bounce (OfflineAudioContext)"
+      - "Loop export"
+      - "Spectrum analyzer toggle"
+      - "PWA manifest + service worker"
+      - "Install prompt"
+      - "Responsive improvements"
+      - "Knob scroll-wheel and double-click-to-reset"
+    validation: "Export a 4-bar loop, install as PWA, works offline"
+
+# ============================================================================
+# ANTI-PATTERNS (things to NOT do)
+# ============================================================================
+
+anti_patterns:
+  - "No React/Vue/Angular — raw DOM is fine for hardware-style UI"
+  - "No npm/webpack/vite — just files"
+  - "No backend server requirement"
+  - "No CDN dependencies"
+  - "No canvas for UI (keep SVG knobs, DOM buttons)"
+  - "No multi-track/DAW features — this is ONE voice, deep control"
+  - "No iOS workarounds — clean code, no hacks"
+  - "No Web Audio connect/disconnect during playback — gain-bypass only"
+  - "No impulse response files for reverb — algorithmic only"
