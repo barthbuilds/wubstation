@@ -1,5 +1,5 @@
 // WUBSTATION 9000 — Service Worker (Cache-first, update in background)
-const CACHE = 'wubstation-v6';
+const CACHE = 'wubstation-v6.4';
 const FILES = [
   './', './index.html', './style.css', './manifest.json',
   './js/state.js', './js/engine.js', './js/scope.js',

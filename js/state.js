@@ -34,16 +34,23 @@ function bCurve(bits) {
 }
 
 // Acoustic vowel formant frequencies (Hz) based on vocal tract resonance research
-// [F1, F2, F3] — F1=jaw height, F2=tongue position, F3=lip rounding
+// [F1, F2, F3, F4, F5] — F1=jaw height, F2=tongue position, F3=lip rounding, F4/F5=presence/air
 const VF = {
-  A: [700, 1220, 2600],
-  E: [360, 2400, 3000],
-  I: [270, 2290, 3010],
-  O: [570,  840, 2410],
-  U: [300,  870, 2240],
+  A:  [700,  1220, 2600, 3300, 3750],
+  E:  [360,  2400, 3000, 3500, 4000],
+  I:  [270,  2290, 3010, 3600, 4100],
+  O:  [570,   840, 2410, 3200, 3650],
+  U:  [300,   870, 2240, 3200, 3500],
+  AH: [750,  1100, 2500, 3300, 3700],
+  EH: [530,  1840, 2480, 3350, 3900],
+  OO: [310,   870, 2250, 3150, 3500],
+  UH: [640,  1190, 2390, 3250, 3700],
 };
 
-const VC = { A: '#ff8800', E: '#ffcc00', I: '#00ff88', O: '#00ccff', U: '#cc44ff' };
+const VC = {
+  A: '#ff8800', E: '#ffcc00', I: '#00ff88', O: '#00ccff', U: '#cc44ff',
+  AH: '#ff4444', EH: '#ff66aa', OO: '#4488ff', UH: '#88ff44',
+};
 const GL = { sine: '\u223F', square: '\u2293', sawtooth: '\u27CB', triangle: '\u2227' };
 const NM = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
@@ -60,7 +67,7 @@ const S = {
   lfo1Rate: 4, lfo1Depth: 600, lfo1Shape: 'sine', lfo1Sync: false, lfo1Div: '1/4',
   lfo2Rate: 2, lfo2Depth: 100, lfo2Shape: 'sine', lfo2Target: 'pitch',
   bcOn: false, bits: 14, bcRate: 1,
-  phOn: false, phRate: .4, phDepth: 1000,
+  phOn: false, phRate: .4, phDepth: 400,
   alfoOn: false, alfoRate: 2.33, alfoDepth: .4,
   distAmt: 40, vol: .65,
   vowelOn: false, vowelMix: 1.0, seqVowels: Array(64).fill('O'),

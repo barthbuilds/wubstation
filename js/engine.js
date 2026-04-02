@@ -5,12 +5,12 @@
 
 // Audio node references — static chain, never disconnect while running
 let ctx, an, mg, lim, dist, crush, filt, vca;
-let l1, l1g, l2, l2g, pha = [], phl, phg;
+let l1, l1g, l2, l2g, pha = [], phl, phg, phaWet, phaDry;
 let al, alg, aldc;
 let o1, o2, o1g, o2g, fmg;
 let sub, subg;
-// vowel: 3 bandpass always in chain, wet/dry mix
-let vf1, vf2, vf3, vwet, vdry;
+// vowel: 5 bandpass always in chain, wet/dry mix
+let vf1, vf2, vf3, vf4, vf5, vwet, vdry;
 // ring: AM via gain driven by carrier; always in chain
 let rmc, rmdepth, rmwet, rmdry;
 // comb: delay+fb always in chain
@@ -149,19 +149,21 @@ async function start() {
   noiseGain.connect(vca); // noise goes through same chain as oscs
 
   // v6: UNISON — extra detuned copies of OSC1
-  rebuildUnison();
+  rebuildUnison(true);
 
-  // Phaser (6 allpass) — Q set low when OFF to be transparent
+  // Phaser (6 allpass) — wet/dry parallel mix creates notches via phase cancellation
   for (let i = 0; i < 6; i++) {
     const a = ctx.createBiquadFilter();
     a.type = 'allpass';
     a.frequency.value = 300 + i * 500;
-    a.Q.value = S.phOn ? 6 : 0.1; // low Q = transparent when off
+    a.Q.value = 1.2;
     pha.push(a);
   }
   for (let i = 0; i < 5; i++) pha[i].connect(pha[i + 1]);
+  phaWet = ctx.createGain(); phaWet.gain.value = S.phOn ? 1 : 0;
+  phaDry = ctx.createGain(); phaDry.gain.value = 1; // dry always on
   phl = ctx.createOscillator(); phl.frequency.value = S.phRate;
-  phg = ctx.createGain(); phg.gain.value = S.phOn ? S.phDepth : 0;
+  phg = ctx.createGain(); phg.gain.value = S.phDepth;
   phl.connect(phg); pha.forEach(a => phg.connect(a.frequency));
 
   // Sub (clean, direct to mg)
@@ -170,18 +172,25 @@ async function start() {
   subg = ctx.createGain(); subg.gain.value = 0;
   sub.connect(subg); subg.connect(mg);
 
-  // VOWEL: 3 BPF in parallel
-  vf1 = ctx.createBiquadFilter(); vf1.type = 'bandpass'; vf1.Q.value = 35;
-  vf2 = ctx.createBiquadFilter(); vf2.type = 'bandpass'; vf2.Q.value = 30;
-  vf3 = ctx.createBiquadFilter(); vf3.type = 'bandpass'; vf3.Q.value = 25;
-  let vg1 = ctx.createGain(); vg1.gain.value = 1.4;
-  let vg2 = ctx.createGain(); vg2.gain.value = 0.9;
-  let vg3 = ctx.createGain(); vg3.gain.value = 0.5;
+  // VOWEL: 5 BPF in parallel (F1-F5 formants)
+  // Q controls resonance width — too high = harsh/staticky, too low = weak
+  vf1 = ctx.createBiquadFilter(); vf1.type = 'bandpass'; vf1.Q.value = 18;
+  vf2 = ctx.createBiquadFilter(); vf2.type = 'bandpass'; vf2.Q.value = 15;
+  vf3 = ctx.createBiquadFilter(); vf3.type = 'bandpass'; vf3.Q.value = 12;
+  vf4 = ctx.createBiquadFilter(); vf4.type = 'bandpass'; vf4.Q.value = 10;
+  vf5 = ctx.createBiquadFilter(); vf5.type = 'bandpass'; vf5.Q.value = 8;
+  let vg1 = ctx.createGain(); vg1.gain.value = 2.4;
+  let vg2 = ctx.createGain(); vg2.gain.value = 1.5;
+  let vg3 = ctx.createGain(); vg3.gain.value = 0.9;
+  let vg4 = ctx.createGain(); vg4.gain.value = 0.5;
+  let vg5 = ctx.createGain(); vg5.gain.value = 0.3;
   vwet = ctx.createGain(); vwet.gain.value = S.vowelOn ? S.vowelMix : 0;
   vdry = ctx.createGain(); vdry.gain.value = S.vowelOn ? (1 - S.vowelMix * 0.85) : 1;
   vf1.connect(vg1); vg1.connect(vwet);
   vf2.connect(vg2); vg2.connect(vwet);
   vf3.connect(vg3); vg3.connect(vwet);
+  vf4.connect(vg4); vg4.connect(vwet);
+  vf5.connect(vg5); vg5.connect(vwet);
   applyVowel('O');
 
   // RING MOD
@@ -247,15 +256,22 @@ async function start() {
   // unison oscs already connected to vca in rebuildUnison()
 
   vca.connect(dist); dist.connect(crush); crush.connect(filt);
+  // Phaser: parallel wet (through allpass chain) + dry (bypass)
   filt.connect(pha[0]);
+  pha[5].connect(phaWet);       // allpass output → wet gain
+  filt.connect(phaDry);          // filter output → dry gain (bypasses allpasses)
+
+  // Merge phaser wet/dry into phaOut node
+  const phaOut = ctx.createGain(); phaOut.gain.value = 1;
+  phaWet.connect(phaOut);
+  phaDry.connect(phaOut);
 
   // vowel filters tap raw osc for max harmonics
   o1g.connect(vf1); o1g.connect(vf2); o1g.connect(vf3);
+  o1g.connect(vf4); o1g.connect(vf5);
 
   // Post-phaser: collect all paths into a single mix bus before FX chain
   const mixBus = ctx.createGain(); mixBus.gain.value = 1;
-
-  const phaOut = pha[5];
 
   // Dry/vowel paths → mixBus
   phaOut.connect(vdry);
@@ -307,16 +323,33 @@ async function start() {
 }
 
 // v6: Unison — creates extra detuned copies of osc1
-function rebuildUnison() {
-  // Clean up old unison oscs
-  uniOscs.forEach(o => { try { o.stop(); } catch (e) {} });
+function rebuildUnison(isInit) {
+  // Fade out old unison oscs before stopping to avoid pops
+  const oldOscs = uniOscs;
+  const oldGains = uniGains;
+  if (!isInit && oldGains.length && ctx) {
+    oldGains.forEach(g => {
+      hold(g.gain);
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.01);
+    });
+    setTimeout(() => {
+      oldOscs.forEach(o => { try { o.stop(); } catch (e) {} });
+    }, 15);
+  } else {
+    oldOscs.forEach(o => { try { o.stop(); } catch (e) {} });
+  }
   uniOscs = []; uniGains = [];
 
   const voices = S.uniVoices;
-  if (voices <= 1 || !ctx) return;
+  if (voices <= 1 || !ctx) {
+    // Ramp main osc back to full volume (only on live rebuild)
+    if (!isInit && o1g) ramp(o1g.gain, S.o1Vol);
+    return;
+  }
 
   const spread = S.uniSpread;
   const hz = m2h(S.activeNote);
+  const vv = S.o1Vol / voices;
   // Create pairs: -spread, +spread, -spread/2, +spread/2, etc.
   const count = voices - 1; // extra voices beyond the main osc
   for (let i = 0; i < count; i++) {
@@ -328,23 +361,37 @@ function rebuildUnison() {
     const sign = i % 2 === 0 ? 1 : -1;
     osc.detune.value = sign * (spread / (voices - 1)) * pair * 2;
     const g = ctx.createGain();
-    g.gain.value = S.o1Vol / voices; // scale volume by voice count
+    g.gain.value = isInit ? vv : 0; // silent on live rebuild, immediate on init
     osc.connect(g);
     g.connect(vca);
     uniOscs.push(osc);
     uniGains.push(g);
   }
-  // Scale main osc volume too
-  if (o1g) o1g.gain.value = S.o1Vol / voices;
+  if (!isInit) {
+    // Live rebuild: start new oscs and fade in
+    uniOscs.forEach(o => o.start());
+    const t = ctx.currentTime;
+    uniGains.forEach(g => {
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vv, t + 0.01);
+    });
+  }
+  // Scale main osc volume — ramp on live rebuild, direct on init
+  if (o1g) {
+    if (isInit) o1g.gain.value = vv;
+    else ramp(o1g.gain, vv);
+  }
 }
 
 function applyVowel(v, t) {
   if (!vf1) return;
-  const tc = .018, now = t || (ctx ? ctx.currentTime : 0);
-  const [f1, f2, f3] = VF[v] || VF.O;
+  const tc = .015, now = t || (ctx ? ctx.currentTime : 0);
+  const [f1, f2, f3, f4, f5] = VF[v] || VF.O;
   vf1.frequency.setTargetAtTime(f1, now, tc);
   vf2.frequency.setTargetAtTime(f2, now, tc);
   vf3.frequency.setTargetAtTime(f3, now, tc);
+  vf4.frequency.setTargetAtTime(f4, now, tc);
+  vf5.frequency.setTargetAtTime(f5, now, tc);
 }
 
 function connectL2() {
@@ -451,13 +498,23 @@ function trig(noteNum, stepIdx, vel) {
   if (S.vowelOn && stepIdx >= 0) applyVowel(S.seqVowels[stepIdx] || 'O', t);
 }
 
-// Live parameter update — cancel → anchor → smooth ramp (eliminates pops)
-function ramp(p, v) {
+// Smoothly cancel any in-progress automation at current time
+function hold(p) {
   if (!p) return;
   const t = ctx.currentTime;
-  p.cancelScheduledValues(t);
-  p.setValueAtTime(p.value, t);
-  p.setTargetAtTime(v, t + 0.001, 0.03);
+  if (p.cancelAndHoldAtTime) {
+    p.cancelAndHoldAtTime(t);
+  } else {
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(p.value, t);
+  }
+}
+
+// Live parameter update — cancelAndHold preserves current value without discontinuity
+function ramp(p, v) {
+  if (!p) return;
+  hold(p);
+  p.setTargetAtTime(v, ctx.currentTime + 0.002, 0.02);
 }
 
 function P(k, v) {
@@ -469,21 +526,17 @@ function P(k, v) {
       if (filt) { ramp(filt.Q, Math.max(.001, Math.min(30, v))); updFViz(); } break;
     case 'filterType':
       if (filt) {
-        // Duck filter Q briefly to soften the type switch
-        const t = ctx.currentTime;
-        filt.Q.cancelScheduledValues(t);
-        filt.Q.setValueAtTime(filt.Q.value, t);
-        filt.Q.linearRampToValueAtTime(0.001, t + 0.008);
+        // Duck master gain to fully silence the type switch
+        hold(mg.gain);
+        mg.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.012);
         setTimeout(() => {
-          if (filt) {
-            filt.type = v;
-            const t2 = ctx.currentTime;
-            filt.Q.cancelScheduledValues(t2);
-            filt.Q.setValueAtTime(0.001, t2);
-            filt.Q.linearRampToValueAtTime(S.reso, t2 + 0.008);
+          if (filt) filt.type = v;
+          if (mg && ctx) {
+            hold(mg.gain);
+            mg.gain.linearRampToValueAtTime(S.vol, ctx.currentTime + 0.012);
           }
-        }, 10);
-        updFViz();
+          updFViz();
+        }, 15);
       } break;
     case 'lfo1Rate':
       if (l1) { ramp(l1.frequency, Math.max(.01, er1())); updSync(); } break;
@@ -505,26 +558,42 @@ function P(k, v) {
       if (mg) ramp(mg.gain, v); break;
     case 'distAmt':
       if (dist) {
-        // Crossfade: briefly duck gain, swap curve, restore — avoids pop
-        const t = ctx.currentTime;
-        mg.gain.cancelScheduledValues(t);
-        mg.gain.setValueAtTime(mg.gain.value, t);
-        mg.gain.linearRampToValueAtTime(0.001, t + 0.01);
+        // Crossfade: briefly duck gain, swap curve, restore
+        hold(mg.gain);
+        mg.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.01);
         setTimeout(() => {
           if (dist) dist.curve = dCurve(v);
           if (mg && ctx) {
-            const t2 = ctx.currentTime;
-            mg.gain.cancelScheduledValues(t2);
-            mg.gain.setValueAtTime(0.001, t2);
-            mg.gain.linearRampToValueAtTime(S.vol, t2 + 0.01);
+            hold(mg.gain);
+            mg.gain.linearRampToValueAtTime(S.vol, ctx.currentTime + 0.01);
           }
         }, 12);
       } break;
     case 'o1Wave':
-      if (o1) o1.type = v;
-      uniOscs.forEach(o => o.type = v);
-      break;
+      if (o1 && o1g) {
+        // Duck gain, swap waveform, restore — avoids discontinuity pop
+        hold(o1g.gain);
+        o1g.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.008);
+        uniGains.forEach(g => {
+          hold(g.gain);
+          g.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.008);
+        });
+        setTimeout(() => {
+          if (o1) o1.type = v;
+          uniOscs.forEach(o => o.type = v);
+          if (o1g && ctx) {
+            const vv = S.uniVoices > 1 ? S.o1Vol / S.uniVoices : S.o1Vol;
+            hold(o1g.gain);
+            o1g.gain.linearRampToValueAtTime(vv, ctx.currentTime + 0.008);
+            uniGains.forEach(g => {
+              hold(g.gain);
+              g.gain.linearRampToValueAtTime(vv, ctx.currentTime + 0.008);
+            });
+          }
+        }, 10);
+      } break;
     case 'o2Wave':
+      // o2 is the FM modulator (gain always 0 on o2g) — type swap is safe
       if (o2) o2.type = v; break;
     case 'detune':
       if (o2) ramp(o2.detune, v); break;
@@ -540,14 +609,13 @@ function P(k, v) {
     case 'fmDepth':
       if (fmg && S.fmOn) ramp(fmg.gain, v * m2h(S.activeNote) / 440); break;
     case 'phOn':
-      if (phg) ramp(phg.gain, v ? S.phDepth : 0);
-      // Ramp allpass Q: resonant when on, transparent when off
-      pha.forEach(a => ramp(a.Q, v ? 6 : 0.1));
+      // Fade allpass path in/out — dry always passes through, phase cancellation creates the effect
+      if (phaWet) ramp(phaWet.gain, v ? 1 : 0);
       led('l-ph', v, 'p'); break;
     case 'phRate':
       if (phl) ramp(phl.frequency, Math.max(.01, v)); break;
     case 'phDepth':
-      if (phg) ramp(phg.gain, S.phOn ? v : 0); break;
+      if (phg) ramp(phg.gain, v); break;
     case 'subOn':
       // Ramp sub gain so toggling during sustain has immediate effect
       if (subg) ramp(subg.gain, v ? S.subVol * S.sustain : 0);
@@ -560,8 +628,10 @@ function P(k, v) {
       if (alg && S.alfoOn) ramp(alg.gain, v); break;
     case 'bcOn':
       if (workletsReady && crush) {
-        crush.parameters.get('bits').value = v ? S.bits : 16;
-        crush.parameters.get('rateReduction').value = v ? S.bcRate : 1;
+        const bp = crush.parameters.get('bits');
+        const rp = crush.parameters.get('rateReduction');
+        hold(bp); bp.setTargetAtTime(v ? S.bits : 16, ctx.currentTime + 0.002, 0.01);
+        hold(rp); rp.setTargetAtTime(v ? S.bcRate : 1, ctx.currentTime + 0.002, 0.01);
       } else if (crush) {
         crush.curve = v ? bCurve(S.bits) : LINEAR_CURVE;
       }
@@ -569,16 +639,17 @@ function P(k, v) {
     case 'bits':
       if (S.bcOn) {
         if (workletsReady && crush) {
-          crush.parameters.get('bits').value = v;
+          const bp = crush.parameters.get('bits');
+          hold(bp); bp.setTargetAtTime(v, ctx.currentTime + 0.002, 0.01);
         } else if (crush) {
-          // Smooth curve transition — the curves are close enough that
-          // swapping between adjacent bit depths doesn't pop audibly,
-          // but we do it safely with the identity curve approach
           crush.curve = bCurve(v);
         }
       } break;
     case 'bcRate':
-      if (S.bcOn && workletsReady && crush) crush.parameters.get('rateReduction').value = v;
+      if (S.bcOn && workletsReady && crush) {
+        const rp = crush.parameters.get('rateReduction');
+        hold(rp); rp.setTargetAtTime(v, ctx.currentTime + 0.002, 0.01);
+      }
       break;
     case 'vowelOn':
       if (vwet) {
@@ -599,7 +670,7 @@ function P(k, v) {
         ramp(rmdry.gain, v ? (1 - S.rmMix * .5) : 1);
       } led('l-rm', v, 'pk'); break;
     case 'rmFreq':
-      if (rmc) ramp(rmc.frequency, Math.max(1, v)); break;
+      if (rmc && S.rmOn) ramp(rmc.frequency, Math.max(1, v)); break;
     case 'rmMix':
       if (rmwet && S.rmOn) {
         ramp(rmwet.gain, v * .5); ramp(rmdry.gain, 1 - v * .5); ramp(rmdepth.gain, v * .5);
@@ -610,14 +681,14 @@ function P(k, v) {
         ramp(cbwet.gain, v ? S.rmMix * .4 : 0);
       } led('l-comb', v, 'g'); break;
     case 'combFreq':
-      if (cbd) ramp(cbd.delayTime, Math.min(.05, 1 / Math.max(v, 1))); break;
+      if (cbd && S.combOn) ramp(cbd.delayTime, Math.min(.05, 1 / Math.max(v, 1))); break;
     case 'combFB':
       if (cbf) ramp(cbf.gain, S.combOn ? Math.min(.93, v) : 0); break;
     case 'stutterOn':
       if (stg) ramp(stg.gain, v ? -S.stutterDepth * .35 : 0);
       led('l-stut', v, 'o'); break;
     case 'stutterRate':
-      if (stl) ramp(stl.frequency, Math.max(.5, v)); break;
+      if (stl && S.stutterOn) ramp(stl.frequency, Math.max(.5, v)); break;
     case 'stutterDepth':
       if (stg && S.stutterOn) ramp(stg.gain, -v * .35); break;
     case 'bpm':
@@ -635,10 +706,22 @@ function P(k, v) {
     case 'noiseVol':
       if (noiseGain && S.noiseOn) ramp(noiseGain.gain, v); break;
     case 'noiseType':
-      if (workletsReady && noiseNode) noiseNode.parameters.get('type').value = v;
+      if (workletsReady && noiseNode && noiseGain) {
+        // Duck noise gain, swap type, restore
+        hold(noiseGain.gain);
+        noiseGain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.006);
+        setTimeout(() => {
+          if (noiseNode) noiseNode.parameters.get('type').value = v;
+          if (noiseGain && ctx && S.noiseOn) {
+            hold(noiseGain.gain);
+            noiseGain.gain.linearRampToValueAtTime(S.noiseVol, ctx.currentTime + 0.006);
+          }
+        }, 8);
+      }
       break;
-    // v6: Unison (requires restart to rebuild graph — handled via UI)
+    // v6: Unison — live rebuild with crossfade
     case 'uniVoices': case 'uniSpread':
+      rebuildUnison(false);
       break;
     // v6: Filter envelope (applied during trig, nothing to do live)
     case 'fenvOn':
@@ -648,9 +731,9 @@ function P(k, v) {
       if (chWet) ramp(chWet.gain, v ? S.chorusMix : 0);
       led('l-chorus', v, 'b'); break;
     case 'chorusRate':
-      if (chLfo) ramp(chLfo.frequency, Math.max(.01, v)); break;
+      if (chLfo && S.chorusOn) ramp(chLfo.frequency, Math.max(.01, v)); break;
     case 'chorusDepth':
-      if (chLfoG) ramp(chLfoG.gain, v / 1000); break;
+      if (chLfoG && S.chorusOn) ramp(chLfoG.gain, v / 1000); break;
     case 'chorusMix':
       if (chWet && S.chorusOn) ramp(chWet.gain, v); break;
     // v6: Delay
@@ -678,19 +761,15 @@ function P(k, v) {
       if (rvWet && S.reverbOn) ramp(rvWet.gain, v); break;
     case 'reverbSize': case 'reverbDamp':
       if (rvConv && rvWet) {
-        // Duck reverb wet, swap buffer, restore — avoids pop
-        const t = ctx.currentTime;
-        rvWet.gain.cancelScheduledValues(t);
-        rvWet.gain.setValueAtTime(rvWet.gain.value, t);
-        rvWet.gain.linearRampToValueAtTime(0, t + 0.015);
+        // Duck reverb wet, swap buffer, restore
+        hold(rvWet.gain);
+        rvWet.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.015);
         setTimeout(() => {
           if (rvConv && ctx) {
             rvConv.buffer = createReverbBuffer(ctx, S.reverbSize, S.reverbDamp);
             if (rvWet && S.reverbOn) {
-              const t2 = ctx.currentTime;
-              rvWet.gain.cancelScheduledValues(t2);
-              rvWet.gain.setValueAtTime(0, t2);
-              rvWet.gain.linearRampToValueAtTime(S.reverbMix, t2 + 0.015);
+              hold(rvWet.gain);
+              rvWet.gain.linearRampToValueAtTime(S.reverbMix, ctx.currentTime + 0.015);
             }
           }
         }, 18);

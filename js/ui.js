@@ -176,7 +176,7 @@ const KS = {};
   ['k-l2d',  { lbl: 'DEPTH',     key: 'lfo2Depth',    min: 0,    max: 1000, step: 10,               acc: '#00ccff', sz: 44 }],
   ['k-bit',  { lbl: 'BITS',      key: 'bits',         min: 2,    max: 16,   step: 1,    unit: 'b',  acc: '#ff4444', sz: 44 }],
   ['k-phr',  { lbl: 'PH RATE',   key: 'phRate',       min: .05,  max: 8,    step: .05,  unit: 'Hz', acc: '#ff8800', sz: 44 }],
-  ['k-phd',  { lbl: 'PH DEPTH',  key: 'phDepth',      min: 0,    max: 3000, step: 50,               acc: '#ff8800', sz: 44 }],
+  ['k-phd',  { lbl: 'PH DEPTH',  key: 'phDepth',      min: 0,    max: 800,  step: 10,               acc: '#ff8800', sz: 44 }],
   ['k-alr',  { lbl: 'PUMP RATE', key: 'alfoRate',     min: .25,  max: 8,    step: .25,  unit: 'Hz', acc: '#ffcc00', sz: 44 }],
   ['k-ald',  { lbl: 'PUMP AMT',  key: 'alfoDepth',    min: 0,    max: .9,   step: .01,              acc: '#ffcc00', sz: 44 }],
   ['k-dis',  { lbl: 'DISTORT',   key: 'distAmt',      min: 0,    max: 200,  step: 1,                acc: '#ff4444', sz: 46 }],
@@ -467,10 +467,10 @@ buildNoteGrid();
 buildVowelGrid();
 hlStep(-1);
 
-// Vowel buttons
-['A', 'E', 'I', 'O', 'U'].forEach(v => {
+// Vowel buttons — generated from VF table
+Object.keys(VF).forEach(v => {
   const b = document.createElement('button'); b.className = 'vbt';
-  b.textContent = v; b.style.color = VC[v]; b.style.borderColor = VC[v] + '44';
+  b.textContent = v; b.style.color = VC[v] || '#aaa'; b.style.borderColor = (VC[v] || '#aaa') + '44';
   b.addEventListener('click', () => {
     if (S.selVStep >= 0) S.seqVowels[S.selVStep] = v;
     else S.seqVowels.fill(v);
